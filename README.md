@@ -7,3 +7,5 @@ Move, rotate and resize them with snapping and collision checks, open their door
 Includes undo/redo and JSON export/import.
 
 Built with Three.js.
+
+[Live demo](https://axel20000.github.io/3dClosetEditor/)
