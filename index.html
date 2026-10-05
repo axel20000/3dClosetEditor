@@ -1,0 +1,1132 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0">
+<title>Configurador de armarios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: barra de herramientas arriba; visor 3D a la izquierda; panel de medidas,
+     presupuesto, despiece y JSON a la derecha (en móvil se apila bajo el visor). */
+  :root {
+    --bg: #E8ECEF;
+    --panel: #F7F9FA;
+    --fg: #17212B;
+    --muted: #5B6773;
+    --line: #CBD3DA;
+    --accent: #0E7C86;
+    --accent-fg: #FFFFFF;
+    --accent-soft: #D5ECEE;
+    --warn: #B4531A;
+    --danger: #C2362B;
+    --scene-bg: #DDE3E8;
+    --floor: #F1F3F4;
+    --wall: #FBFCFC;
+    --grid: #BAC3CA;
+    --pillar: #9AA3AB;
+    --edge: #2A323A;
+    --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+    --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0F1519; --panel: #171F25; --fg: #E4EAEE; --muted: #93A0AB; --line: #2B3640;
+      --accent: #4CC3CF; --accent-fg: #0B1418; --accent-soft: #16373B; --warn: #E39A62; --danger: #F0675C;
+      --scene-bg: #10181D; --floor: #1D272E; --wall: #26323A; --grid: #2E3B44; --pillar: #56626B; --edge: #05090B;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F1519; --panel: #171F25; --fg: #E4EAEE; --muted: #93A0AB; --line: #2B3640;
+    --accent: #4CC3CF; --accent-fg: #0B1418; --accent-soft: #16373B; --warn: #E39A62; --danger: #F0675C;
+    --scene-bg: #10181D; --floor: #1D272E; --wall: #26323A; --grid: #2E3B44; --pillar: #56626B; --edge: #05090B;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font-body); padding-inline: 16px; padding-block: 14px; }
+  .app { max-width: 1280px; margin-inline: auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  h1 { font: 600 30px/1 var(--font-display); letter-spacing: .01em; margin: 0; text-wrap: balance; }
+  .sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sep { width: 1px; height: 24px; background: var(--line); }
+
+  .btn { font: 500 13px var(--font-body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 7px 12px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn:focus-visible, select:focus-visible, textarea:focus-visible, [role="tab"]:focus-visible, .inp:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+
+  .stage { position: relative; height: clamp(420px, 70vh, 740px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--scene-bg); }
+  #view { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+  .views { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .views .btn { padding: 5px 10px; font-size: 12px; }
+  .labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .cota { position: absolute; transform: translate(-50%, -50%); font: 500 11px var(--font-mono); background: var(--panel); color: var(--fg); border: 1px solid var(--accent); border-radius: 3px; padding: 0 5px; white-space: nowrap; }
+  .statusbar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 7px 12px; background: color-mix(in srgb, var(--panel) 90%, transparent); border-top: 1px solid var(--line); font-size: 12px; }
+  #status[data-kind="warn"] { color: var(--warn); font-weight: 500; }
+  .keys { color: var(--muted); }
+  kbd { font: 500 11px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; background: var(--bg); }
+
+  .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; min-width: 0; }
+  h2 { margin: 0 0 10px; font: 500 12px var(--font-mono); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+  .hint { margin: 0; color: var(--muted); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .inp { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); padding-right: 8px; }
+  .inp input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: var(--fg); font: 500 14px var(--font-mono); padding: 7px 8px; outline: none; }
+  .inp span { font: 12px var(--font-mono); color: var(--muted); }
+  select { width: 100%; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: 500 14px var(--font-body); padding: 7px 8px; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; cursor: pointer; }
+
+  .pline { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+  .pline b { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .pline.total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; font-weight: 600; }
+  .pline.total b { font-size: 15px; color: var(--accent); }
+  .note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+  [role="tab"] { font: 500 13px var(--font-body); background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 6px 10px; cursor: pointer; margin-bottom: -1px; }
+  [role="tab"][aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font: 500 11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 4px 8px 6px 0; white-space: nowrap; }
+  td { padding: 5px 8px 5px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; padding-right: 0; }
+  td.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  textarea { width: 100%; height: 280px; resize: vertical; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); font: 12px/1.45 var(--font-mono); padding: 8px; white-space: pre; overflow: auto; }
+  .jsonbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  #jsonMsg { margin: 8px 0 0; font-size: 12px; color: var(--warn); }
+
+  @media (max-width: 920px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Configurador de armarios</h1>
+      <p class="sub">Prototipo de editor 3D web · medidas en milímetros · tarifas de ejemplo</p>
+    </div>
+    <div class="toolbar" role="toolbar" aria-label="Acciones">
+      <button class="btn primary" id="btnAdd" type="button">Añadir armario</button>
+      <button class="btn" id="btnRotate" type="button">Girar 90°</button>
+      <button class="btn" id="btnDup" type="button">Duplicar</button>
+      <button class="btn" id="btnDel" type="button">Eliminar</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="btn" id="btnUndo" type="button">Deshacer</button>
+      <button class="btn" id="btnRedo" type="button">Rehacer</button>
+    </div>
+  </header>
+
+  <main class="work">
+    <section class="stage" aria-label="Visor 3D de la habitación">
+      <canvas id="view" aria-label="Habitación en 3D con armarios"></canvas>
+      <div class="labels" id="labels"></div>
+      <div class="views" role="group" aria-label="Vistas">
+        <button class="btn" type="button" data-view="persp">Perspectiva</button>
+        <button class="btn" type="button" data-view="top">Planta</button>
+        <button class="btn" type="button" data-view="front">Frente</button>
+      </div>
+      <div class="statusbar">
+        <span id="status" aria-live="polite" data-kind="info">Cargando…</span>
+        <span class="keys"><kbd>Clic</kbd> seleccionar · <kbd>Arrastrar</kbd> mover · <kbd>R</kbd> girar · <kbd>Supr</kbd> borrar · <kbd>Ctrl</kbd>+<kbd>Z</kbd> deshacer</span>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel" aria-labelledby="h-sel">
+        <h2 id="h-sel">Armario seleccionado</h2>
+        <p class="hint" id="selHint">Haz clic en un armario del visor para editar sus medidas.</p>
+        <form id="itemForm" autocomplete="off" hidden>
+          <div class="grid2">
+            <div class="field"><label for="f-width">Ancho</label><div class="inp"><input id="f-width" type="number" step="10" inputmode="numeric"><span>mm</span></div></div>
+            <div class="field"><label for="f-height">Alto</label><div class="inp"><input id="f-height" type="number" step="10" inputmode="numeric"><span>mm</span></div></div>
+            <div class="field"><label for="f-depth">Fondo</label><div class="inp"><input id="f-depth" type="number" step="10" inputmode="numeric"><span>mm</span></div></div>
+            <div class="field"><label for="f-rot">Giro</label><div class="inp"><input id="f-rot" type="number" step="15" inputmode="numeric"><span>°</span></div></div>
+            <div class="field"><label for="f-shelves">Baldas</label><div class="inp"><input id="f-shelves" type="number" step="1" min="0" max="8" inputmode="numeric"><span>uds</span></div></div>
+            <div class="field"><label for="f-doors">Puertas</label><div class="inp"><input id="f-doors" type="number" step="1" min="1" max="4" inputmode="numeric"><span>uds</span></div></div>
+            <div class="field wide"><label for="f-finish">Acabado</label><select id="f-finish"></select></div>
+          </div>
+          <label class="check"><input type="checkbox" id="f-open"> Mostrar puertas abiertas</label>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="h-price">
+        <h2 id="h-price">Presupuesto de ejemplo</h2>
+        <div id="price"></div>
+        <p class="note">Tarifas inventadas. En el proyecto real saldrían de la API de precios con el catálogo de la empresa.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-out">
+        <h2 id="h-out">Lo que recibiría fábrica</h2>
+        <div class="tabs" role="tablist" aria-label="Salidas del modelo">
+          <button role="tab" id="tab-cut-btn" aria-selected="true" aria-controls="tab-cut" type="button">Despiece</button>
+          <button role="tab" id="tab-json-btn" aria-selected="false" aria-controls="tab-json" type="button">Modelo JSON</button>
+        </div>
+        <div id="tab-cut" role="tabpanel" aria-labelledby="tab-cut-btn">
+          <div class="tablewrap" id="cutTable"></div>
+        </div>
+        <div id="tab-json" role="tabpanel" aria-labelledby="tab-json-btn" hidden>
+          <textarea id="jsonArea" spellcheck="false" aria-label="Modelo del proyecto en JSON"></textarea>
+          <div class="jsonbar">
+            <button class="btn" id="btnCopy" type="button">Copiar JSON</button>
+            <button class="btn" id="btnLoad" type="button">Aplicar JSON editado</button>
+          </div>
+          <p id="jsonMsg" role="alert" hidden></p>
+        </div>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.159.0/three.min.js"></script>
+<script>
+  /* Si cdnjs no sirve el archivo, se intenta con jsDelivr (misma versión). */
+  if (!window.THREE) document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"><\/script>');
+</script>
+
+<!-- ============================================================================
+     1. MODELO
+     Todo lo de este bloque es JavaScript puro: no usa Three.js ni el DOM.
+     Es la parte que en el proyecto real viviría en TypeScript, con pruebas
+     automáticas. El visor solo dibuja lo que dice este modelo.
+     ============================================================================ -->
+<script id="modelo">
+/* Constantes de fabricación (mm) */
+const PANEL_T = 18;      // grosor del tablero
+const BACK_T = 6;        // grosor del fondo
+const PLINTH_H = 80;     // altura del zócalo
+const SNAP_MM = 60;      // distancia a la que un "imán" atrae
+const EPS = 0.5;         // tolerancia para considerar que dos piezas se tocan
+const MAX_DOOR_W = 600;  // regla de ejemplo: una puerta no pasa de 600 mm de ancho
+
+const FINISHES = {
+  roble:   { label: 'Roble natural', color: '#C9A36F', eurM2: 62 },
+  blanco:  { label: 'Blanco mate',   color: '#ECEBE6', eurM2: 38 },
+  nogal:   { label: 'Nogal',         color: '#6E4B36', eurM2: 85 },
+  grafito: { label: 'Grafito',       color: '#3B4046', eurM2: 55 }
+};
+const LIMITS = { width: [300, 2400], height: [600, 2500], depth: [300, 800], shelves: [0, 8], doors: [1, 4] };
+
+/* Estado inicial. Esto es lo que se guardaría y se enviaría a precios y fabricación.
+   Posiciones: x, z = centro del armario sobre el suelo. rot en grados. */
+function initialState() {
+  return {
+    version: 1,
+    room: { width: 4200, depth: 3200, height: 2500 },
+    pillars: [{ id: 'p1', x: 3000, z: 150, width: 300, depth: 300 }],
+    items: [
+      { id: 'a1', type: 'armario', x: 600,  z: 300, rot: 0, width: 1200, height: 2200, depth: 600, shelves: 4, doors: 2, finish: 'roble' },
+      { id: 'a2', type: 'armario', x: 1650, z: 300, rot: 0, width: 900,  height: 2200, depth: 600, shelves: 3, doors: 2, finish: 'blanco' }
+    ]
+  };
+}
+
+function round1(v) { return Math.round(v * 10) / 10; }
+function clampDim(v, range) {
+  v = Number(v);
+  if (!isFinite(v)) v = range[0];
+  return Math.min(range[1], Math.max(range[0], Math.round(v)));
+}
+function itemById(st, id) { return st.items.find(i => i.id === id) || null; }
+function nextId(st) {
+  let max = 0;
+  for (const i of st.items) { const m = /^a(\d+)$/.exec(i.id); if (m) max = Math.max(max, +m[1]); }
+  return 'a' + (max + 1);
+}
+
+/* ---------- Geometría 2D en planta ---------- */
+
+/* Las 4 esquinas de un rectángulo con centro (x,z), tamaño width×depth y giro rot.
+   Usa la misma fórmula que Three.js para rotation.y, así modelo y vista coinciden. */
+function footprint(r) {
+  const a = (r.rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  const hw = r.width / 2, hd = r.depth / 2;
+  return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, lz]) => ({
+    x: r.x + lx * c + lz * s,
+    z: r.z - lx * s + lz * c
+  }));
+}
+function bbox(poly) {
+  const xs = poly.map(p => p.x), zs = poly.map(p => p.z);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) };
+}
+/* Colisión entre dos rectángulos girados (teorema de ejes separadores).
+   Si se tocan por el borde, NO cuenta como choque. */
+function axesOf(poly) {
+  const out = [];
+  for (let i = 0; i < 2; i++) {
+    const p = poly[i], q = poly[i + 1], ex = q.x - p.x, ez = q.z - p.z, len = Math.hypot(ex, ez);
+    out.push({ x: -ez / len, z: ex / len });
+  }
+  return out;
+}
+function project(poly, ax) {
+  let mn = Infinity, mx = -Infinity;
+  for (const p of poly) { const d = p.x * ax.x + p.z * ax.z; if (d < mn) mn = d; if (d > mx) mx = d; }
+  return [mn, mx];
+}
+function overlaps(A, B) {
+  for (const ax of [...axesOf(A), ...axesOf(B)]) {
+    const [a0, a1] = project(A, ax), [b0, b1] = project(B, ax);
+    if (a1 <= b0 + EPS || b1 <= a0 + EPS) return false;
+  }
+  return true;
+}
+
+/* ---------- Reglas ---------- */
+
+/* ¿Puede estar este armario aquí? Devuelve {ok} o {ok:false, reason}. */
+function validatePlacement(it, st) {
+  const poly = footprint(it), W = st.room.width, D = st.room.depth;
+  for (const p of poly) {
+    if (p.x < -EPS || p.x > W + EPS || p.z < -EPS || p.z > D + EPS) return { ok: false, reason: 'sale de la habitación' };
+  }
+  if (it.height > st.room.height) return { ok: false, reason: 'supera la altura del techo' };
+  for (const pl of st.pillars) {
+    if (overlaps(poly, footprint({ ...pl, rot: 0 }))) return { ok: false, reason: 'choca con un pilar' };
+  }
+  for (const o of st.items) {
+    if (o.id !== it.id && overlaps(poly, footprint(o))) return { ok: false, reason: 'choca con otro armario' };
+  }
+  return { ok: true };
+}
+
+/* Imanes: acerca el armario a paredes y vecinos si queda a menos de SNAP_MM.
+   Solo con giros de 90° (con otros ángulos solo se ajusta a una rejilla de 10 mm). */
+function snapAxis(c, h, targets) {
+  let best = null;
+  for (const t of targets) {
+    const edge = t.side === 'min' ? c - h : c + h;
+    const d = t.v - edge;
+    if (Math.abs(d) <= SNAP_MM && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, label: t.label };
+  }
+  return best;
+}
+function snapPosition(it, cx, cz, st) {
+  const rot = ((it.rot % 360) + 360) % 360;
+  const grid = v => Math.round(v / 10) * 10;
+  if (rot % 90 !== 0) return { x: grid(cx), z: grid(cz), notes: [] };
+  const sw = rot % 180 !== 0;
+  const hx = (sw ? it.depth : it.width) / 2, hz = (sw ? it.width : it.depth) / 2;
+  const others = [
+    ...st.pillars.map(p => ({ ...bbox(footprint({ ...p, rot: 0 })), name: 'pilar' })),
+    ...st.items.filter(o => o.id !== it.id).map(o => ({ ...bbox(footprint(o)), name: 'armario vecino' }))
+  ];
+  const tx = [{ v: 0, side: 'min', label: 'pared izquierda' }, { v: st.room.width, side: 'max', label: 'pared derecha' }];
+  const tz = [{ v: 0, side: 'min', label: 'pared trasera' }, { v: st.room.depth, side: 'max', label: 'pared frontal' }];
+  for (const o of others) {
+    if (o.minZ - SNAP_MM < cz + hz && o.maxZ + SNAP_MM > cz - hz) {
+      tx.push({ v: o.maxX, side: 'min', label: o.name }, { v: o.minX, side: 'max', label: o.name });
+    }
+    if (o.minX - SNAP_MM < cx + hx && o.maxX + SNAP_MM > cx - hx) {
+      tz.push({ v: o.maxZ, side: 'min', label: o.name }, { v: o.minZ, side: 'max', label: o.name });
+    }
+  }
+  const notes = [];
+  let x = grid(cx), z = grid(cz);
+  const bx = snapAxis(cx, hx, tx); if (bx) { x = round1(cx + bx.d); notes.push(bx.label); }
+  const bz = snapAxis(cz, hz, tz); if (bz) { z = round1(cz + bz.d); notes.push(bz.label); }
+  return { x, z, notes };
+}
+
+/* Si el armario crece y se sale de la habitación, intenta empujarlo hacia dentro. */
+function nudgeInside(it, st) {
+  const b = bbox(footprint(it));
+  let dx = 0, dz = 0;
+  if (b.minX < 0) dx = -b.minX; else if (b.maxX > st.room.width) dx = st.room.width - b.maxX;
+  if (b.minZ < 0) dz = -b.minZ; else if (b.maxZ > st.room.depth) dz = st.room.depth - b.maxZ;
+  if (!dx && !dz) return null;
+  return { ...it, x: round1(it.x + dx), z: round1(it.z + dz) };
+}
+
+/* Una edición del panel pasa por aquí: aplica los límites, las reglas de fabricación
+   y comprueba que el armario sigue cabiendo. Devuelve {ok, item, notes} o {ok:false, reason}. */
+function tryEdit(st, id, patch) {
+  const cur = itemById(st, id);
+  const next = { ...cur, ...patch };
+  const notes = [];
+  next.width = clampDim(next.width, LIMITS.width);
+  next.height = clampDim(next.height, [LIMITS.height[0], Math.min(LIMITS.height[1], st.room.height)]);
+  next.depth = clampDim(next.depth, LIMITS.depth);
+  next.shelves = clampDim(next.shelves, LIMITS.shelves);
+  next.doors = clampDim(next.doors, LIMITS.doors);
+  const needDoors = Math.ceil(next.width / MAX_DOOR_W);
+  if (next.doors < needDoors) {
+    next.doors = needDoors;
+    notes.push('Puertas subidas a ' + needDoors + ': máximo ' + MAX_DOOR_W + ' mm por puerta.');
+  }
+  next.rot = ((Math.round(Number(next.rot) || 0) % 360) + 360) % 360;
+  if (!FINISHES[next.finish]) next.finish = cur.finish;
+  let v = validatePlacement(next, st);
+  if (!v.ok) {
+    const moved = nudgeInside(next, st);
+    if (moved) {
+      const v2 = validatePlacement(moved, st);
+      if (v2.ok) {
+        notes.push('Armario desplazado para que quepa.');
+        return { ok: true, item: moved, notes };
+      }
+      return { ok: false, reason: 'no cabe: ' + v2.reason };
+    }
+    return { ok: false, reason: v.reason };
+  }
+  return { ok: true, item: next, notes };
+}
+
+/* Primer hueco libre para un armario nuevo, empezando por el rincón trasero izquierdo. */
+function findFreeSpot(proto, st) {
+  const step = 50;
+  for (let z = 0; z <= st.room.depth; z += step) {
+    for (let x = 0; x <= st.room.width; x += step) {
+      if (validatePlacement({ ...proto, x, z }, st).ok) return { x, z };
+    }
+  }
+  return null;
+}
+
+/* Cotas: distancia desde el armario hasta cada pared de la habitación. */
+function cotasOf(it, st) {
+  const b = bbox(footprint(it)), cx = it.x, cz = it.z;
+  return [
+    { a: { x: b.minX, z: cz }, b: { x: 0, z: cz }, mm: b.minX },
+    { a: { x: cx, z: b.minZ }, b: { x: cx, z: 0 }, mm: b.minZ },
+    { a: { x: b.maxX, z: cz }, b: { x: st.room.width, z: cz }, mm: st.room.width - b.maxX },
+    { a: { x: cx, z: b.maxZ }, b: { x: cx, z: st.room.depth }, mm: st.room.depth - b.maxZ }
+  ];
+}
+
+/* ---------- Modelo paramétrico: del armario a sus piezas ----------
+   Una sola fuente de verdad. Las mismas piezas se dibujan en 3D, se cuentan en el
+   despiece y se miden para el precio. Cada pieza: tamaño [x,y,z] y posición del
+   centro [x,y,z] en el sistema local del armario (el frente mira a +z). */
+function buildParts(it) {
+  const W = it.width, H = it.height, D = it.depth, T = PANEL_T, B = BACK_T, Z = PLINTH_H;
+  const P = [];
+  const add = (name, kind, size, pos, extra) => P.push({ name, kind, size, pos, ...(extra || {}) });
+  add('Lateral izquierdo', 'panel', [T, H, D], [-W / 2 + T / 2, H / 2, 0]);
+  add('Lateral derecho',   'panel', [T, H, D], [ W / 2 - T / 2, H / 2, 0]);
+  add('Base',  'panel', [W - 2 * T, T, D - B], [0, Z + T / 2, B / 2]);
+  add('Techo', 'panel', [W - 2 * T, T, D - B], [0, H - T / 2, B / 2]);
+  add('Trasera', 'panel', [W - 2 * T, H - Z, B], [0, (H + Z) / 2, -D / 2 + B / 2]);
+  add('Zócalo', 'panel', [W - 2 * T, Z, T], [0, Z / 2, D / 2 - 50 - T / 2]);
+  const y0 = Z + T, y1 = H - T, shelfD = D - B - 20;
+  for (let i = 1; i <= it.shelves; i++) {
+    add('Balda', 'panel', [W - 2 * T - 2, T, shelfD], [0, y0 + (y1 - y0) * i / (it.shelves + 1), -D / 2 + B + shelfD / 2]);
+  }
+  const k = it.doors, gap = 3, dw = (W - gap * (k + 1)) / k, dh = H - Z - 4, dy = Z + 2 + dh / 2, dz = D / 2 + T / 2 + 1;
+  for (let i = 0; i < k; i++) {
+    const left = -W / 2 + gap + i * (dw + gap);
+    const hinge = (k === 1 || i < k / 2) ? 'L' : 'R';          // las puertas se abren desde el centro hacia fuera
+    const hx = hinge === 'L' ? left : left + dw;               // posición de la bisagra
+    add('Puerta', 'door', [dw, dh, T], [left + dw / 2, dy, dz], { door: i, hinge, hx });
+    add('Tirador', 'handle', [12, 220, 14], [hinge === 'L' ? left + dw - 35 : left + 35, dy, dz + T / 2 + 7], { door: i, hinge, hx });
+  }
+  return P;
+}
+
+/* ---------- Precio y despiece (tarifas inventadas) ---------- */
+function hingesPerDoor(h) { return h <= 900 ? 2 : h <= 1600 ? 3 : h <= 2000 ? 4 : 5; }
+function priceOf(it) {
+  const f = FINISHES[it.finish];
+  let area = 0;
+  for (const p of buildParts(it)) {
+    if (p.kind === 'handle') continue;
+    const s = [...p.size].sort((a, b) => b - a);
+    area += s[0] * s[1] / 1e6;
+  }
+  const hinges = it.doors * hingesPerDoor(it.height);
+  const material = area * f.eurM2;
+  const hardware = hinges * 2.4 + it.doors * 7.5;
+  const labor = 55 + 12 * area;
+  return { area, hinges, material, hardware, labor, total: material + hardware + labor };
+}
+function cutList(items) {
+  const map = new Map();
+  let hinges = 0, handles = 0;
+  for (const it of items) {
+    hinges += it.doors * hingesPerDoor(it.height);
+    for (const p of buildParts(it)) {
+      if (p.kind === 'handle') { handles++; continue; }
+      const dims = p.size.map(Math.round).sort((a, b) => b - a);
+      const key = p.name + '|' + dims.join('x') + '|' + it.finish;
+      const row = map.get(key) || { name: p.name, dims, finish: it.finish, qty: 0 };
+      row.qty++;
+      map.set(key, row);
+    }
+  }
+  return { rows: [...map.values()], hinges, handles };
+}
+
+/* ---------- Cargar un JSON: valida todo antes de aceptarlo ---------- */
+function parseState(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { return { ok: false, error: 'JSON no válido: ' + e.message }; }
+  if (!o || typeof o !== 'object' || !o.room || !Array.isArray(o.items)) return { ok: false, error: 'Faltan "room" o "items".' };
+  const st = {
+    version: 1,
+    room: { width: +o.room.width, depth: +o.room.depth, height: +o.room.height },
+    pillars: (Array.isArray(o.pillars) ? o.pillars : []).map(p => ({ id: String(p.id), x: +p.x, z: +p.z, width: +p.width, depth: +p.depth })),
+    items: []
+  };
+  for (const k of ['width', 'depth', 'height']) {
+    if (!(st.room[k] >= 1000 && st.room[k] <= 20000)) return { ok: false, error: 'room.' + k + ' debe estar entre 1000 y 20000 mm.' };
+  }
+  for (const p of st.pillars) {
+    if ([p.x, p.z, p.width, p.depth].some(v => !isFinite(v) || v <= 0)) return { ok: false, error: 'Un pilar tiene medidas no válidas.' };
+  }
+  const seen = new Set();
+  for (const [i, r] of o.items.entries()) {
+    const id = String(r.id || ('a' + (i + 1)));
+    if (seen.has(id)) return { ok: false, error: 'Identificador repetido: ' + id };
+    seen.add(id);
+    if (!FINISHES[r.finish]) return { ok: false, error: 'Acabado desconocido en ' + id + '.' };
+    const it = {
+      id, type: 'armario', x: +r.x, z: +r.z, rot: ((+r.rot || 0) % 360 + 360) % 360,
+      width: clampDim(r.width, LIMITS.width), height: clampDim(r.height, [LIMITS.height[0], Math.min(LIMITS.height[1], st.room.height)]),
+      depth: clampDim(r.depth, LIMITS.depth), shelves: clampDim(r.shelves, LIMITS.shelves), doors: clampDim(r.doors, LIMITS.doors),
+      finish: r.finish
+    };
+    if (!isFinite(it.x) || !isFinite(it.z)) return { ok: false, error: 'Posición no válida en ' + id + '.' };
+    st.items.push(it);
+  }
+  for (const it of st.items) {
+    const v = validatePlacement(it, st);
+    if (!v.ok) return { ok: false, error: 'El armario ' + it.id + ' ' + v.reason + '.' };
+  }
+  return { ok: true, state: st };
+}
+</script>
+
+<!-- ============================================================================
+     2. VISTA, INTERACCIÓN Y PANEL
+     Aquí está Three.js. Esta parte lee el modelo y lo dibuja; cuando el usuario
+     arrastra o edita, modifica el modelo y vuelve a dibujar.
+     ============================================================================ -->
+<script id="vista">
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const statusEl = $('status');
+  function setStatus(msg, kind) { statusEl.textContent = msg; statusEl.dataset.kind = kind || 'info'; }
+
+  if (!window.THREE) { setStatus('No se pudo cargar Three.js. Comprueba la conexión y recarga la página.', 'warn'); return; }
+
+  /* ---------- Estado ---------- */
+  let state = initialState();      // el modelo (se guarda y se exporta)
+  let selectedId = null;           // estado de la vista: no va en el JSON
+  const openIds = new Set();       // estado de la vista: puertas abiertas
+  const hist = { stack: [JSON.stringify(state)], i: 0 };   // deshacer/rehacer = fotos del modelo
+  const MM = 0.001;                // el modelo está en mm; Three.js trabaja aquí en metros
+  let dirty = true;                // solo se vuelve a dibujar si algo cambió
+  const invalidate = () => { dirty = true; };
+
+  /* ---------- Escena base ---------- */
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: $('view'), antialias: true });
+  } catch (e) {
+    setStatus('Tu navegador no puede crear el contexto WebGL necesario para el visor 3D.', 'warn');
+    return;
+  }
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const canvas = renderer.domElement;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 60);
+
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x8a929a, 1.3);
+  const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -5; sun.shadow.camera.right = 5; sun.shadow.camera.top = 5; sun.shadow.camera.bottom = -5;
+  sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 20;
+  sun.shadow.bias = -0.0006;
+  scene.add(hemi, sun, sun.target);
+
+  /* Materiales compartidos. Sus colores salen de las variables CSS (tema claro/oscuro). */
+  const floorMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
+  const wallMat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.FrontSide });
+  const pillarMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  const gridMat = new THREE.LineBasicMaterial();
+  const edgeMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.4 });
+  const handleMat = new THREE.MeshStandardMaterial({ color: 0xa6adb4, metalness: 0.8, roughness: 0.35 });
+  const selMat = new THREE.LineBasicMaterial({ depthTest: false, transparent: true });
+  const selFloorMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.22, depthWrite: false });
+  const cotaMat = new THREE.LineBasicMaterial({ depthTest: false });
+  const finishMats = {};
+  function finishMaterial(key) {
+    if (!finishMats[key]) finishMats[key] = new THREE.MeshStandardMaterial({ color: FINISHES[key].color, roughness: 0.75 });
+    return finishMats[key];
+  }
+
+  function cssColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  let blocked = false;
+  function applyTheme() {
+    scene.background = new THREE.Color(cssColor('--scene-bg'));
+    floorMat.color.set(cssColor('--floor'));
+    wallMat.color.set(cssColor('--wall'));
+    pillarMat.color.set(cssColor('--pillar'));
+    gridMat.color.set(cssColor('--grid'));
+    edgeMat.color.set(cssColor('--edge'));
+    selMat.color.set(cssColor(blocked ? '--danger' : '--accent'));
+    selFloorMat.color.set(cssColor(blocked ? '--danger' : '--accent'));
+    cotaMat.color.set(cssColor('--accent'));
+    invalidate();
+  }
+  function setBlocked(b) { if (blocked !== b) { blocked = b; applyTheme(); } }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function disposeObject(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); }); }
+
+  /* ---------- Habitación: suelo, rejilla, paredes y pilares ---------- */
+  const roomGroup = new THREE.Group();
+  scene.add(roomGroup);
+  function buildRoom() {
+    while (roomGroup.children.length) { const c = roomGroup.children[0]; roomGroup.remove(c); disposeObject(c); }
+    const W = state.room.width, D = state.room.depth, H = state.room.height;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * MM, D * MM), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(W * MM / 2, 0, D * MM / 2);
+    floor.receiveShadow = true;
+    roomGroup.add(floor);
+
+    const pts = [];                                   // rejilla cada 500 mm
+    for (let x = 0; x <= W; x += 500) pts.push(x * MM, 0.001, 0, x * MM, 0.001, D * MM);
+    for (let z = 0; z <= D; z += 500) pts.push(0, 0.001, z * MM, W * MM, 0.001, z * MM);
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    roomGroup.add(new THREE.LineSegments(gg, gridMat));
+
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(W * MM, H * MM), wallMat);
+    back.position.set(W * MM / 2, H * MM / 2, 0);
+    back.receiveShadow = true;
+    const left = new THREE.Mesh(new THREE.PlaneGeometry(D * MM, H * MM), wallMat);
+    left.rotation.y = Math.PI / 2;
+    left.position.set(0, H * MM / 2, D * MM / 2);
+    left.receiveShadow = true;
+    roomGroup.add(back, left);
+
+    for (const p of state.pillars) {
+      const geo = new THREE.BoxGeometry(p.width * MM, H * MM, p.depth * MM);
+      const m = new THREE.Mesh(geo, pillarMat);
+      m.position.set(p.x * MM, H * MM / 2, p.z * MM);
+      m.castShadow = true; m.receiveShadow = true;
+      m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+      roomGroup.add(m);
+    }
+    sun.position.set(W * MM / 2 + 2.5, 6, D * MM / 2 + 3.5);
+    sun.target.position.set(W * MM / 2, 0, D * MM / 2);
+    invalidate();
+  }
+
+  /* ---------- Armarios: el modelo se convierte en mallas ---------- */
+  const groups = new Map();                           // id -> THREE.Group
+  const DOOR_OPEN = 1.75;                             // ≈ 100°
+  function makeCabinet(it) {
+    const g = new THREE.Group();
+    g.userData.id = it.id;
+    g.userData.doors = [];
+    const pivots = new Map();
+    for (const p of buildParts(it)) {
+      const geo = new THREE.BoxGeometry(p.size[0] * MM, p.size[1] * MM, p.size[2] * MM);
+      const mesh = new THREE.Mesh(geo, p.kind === 'handle' ? handleMat : finishMaterial(it.finish));
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+      let parent = g, px = p.pos[0];
+      if (p.door !== undefined) {                     // puertas y tiradores cuelgan de un pivote en la bisagra
+        let pv = pivots.get(p.door);
+        if (!pv) {
+          pv = new THREE.Group();
+          pv.position.x = p.hx * MM;
+          pv.userData.hinge = p.hinge;
+          g.add(pv); pivots.set(p.door, pv); g.userData.doors.push(pv);
+        }
+        parent = pv; px = p.pos[0] - p.hx;
+      }
+      mesh.position.set(px * MM, p.pos[1] * MM, p.pos[2] * MM);
+      parent.add(mesh);
+    }
+    placeCabinet(g, it);
+    return g;
+  }
+  function placeCabinet(g, it) {
+    g.position.set(it.x * MM, 0, it.z * MM);
+    g.rotation.y = it.rot * Math.PI / 180;
+  }
+  function rebuildItem(it) {
+    const old = groups.get(it.id);
+    if (old) { scene.remove(old); disposeObject(old); }
+    const g = makeCabinet(it);
+    scene.add(g);
+    groups.set(it.id, g);
+    if (it.id === selectedId) updateSelection();
+    invalidate();
+  }
+  function syncAll() {
+    selHelpers = [];
+    for (const [id, g] of groups) { scene.remove(g); disposeObject(g); groups.delete(id); }
+    for (const it of state.items) rebuildItem(it);
+    updateSelection();
+  }
+  function animateDoors() {
+    for (const [id, g] of groups) {
+      const goal = openIds.has(id) ? DOOR_OPEN : 0;
+      for (const pv of g.userData.doors) {
+        const target = pv.userData.hinge === 'L' ? -goal : goal;   // la puerta izquierda gira al revés que la derecha
+        const d = target - pv.rotation.y;
+        if (Math.abs(d) > 0.002) { pv.rotation.y += d * 0.18; invalidate(); }
+        else if (d !== 0) { pv.rotation.y = target; invalidate(); }
+      }
+    }
+  }
+
+  /* ---------- Selección y cotas ---------- */
+  let selHelpers = [];
+  function updateSelection() {
+    for (const h of selHelpers) { if (h.parent) h.parent.remove(h); h.geometry.dispose(); }
+    selHelpers = [];
+    const it = itemById(state, selectedId), g = groups.get(selectedId);
+    if (!it || !g) { invalidate(); return; }
+    const box = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry((it.width + 12) * MM, (it.height + 12) * MM, (it.depth + 12) * MM)), selMat);
+    box.position.y = it.height * MM / 2;
+    box.renderOrder = 8;
+    box.raycast = () => {};
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry((it.width + 60) * MM, (it.depth + 60) * MM), selFloorMat);
+    fl.rotation.x = -Math.PI / 2;
+    fl.position.y = 0.003;
+    fl.raycast = () => {};
+    g.add(box, fl);
+    selHelpers.push(box, fl);
+    invalidate();
+  }
+
+  const cotaGroup = new THREE.Group();
+  scene.add(cotaGroup);
+  const labelEls = [0, 1, 2, 3].map(() => {
+    const d = document.createElement('div');
+    d.className = 'cota'; d.hidden = true;
+    $('labels').appendChild(d);
+    return d;
+  });
+  let cotaAnchors = [];
+  function refreshCotas() {
+    while (cotaGroup.children.length) { const c = cotaGroup.children[0]; cotaGroup.remove(c); c.geometry.dispose(); }
+    cotaAnchors = [];
+    labelEls.forEach(l => { l.hidden = true; });
+    const it = itemById(state, selectedId);
+    if (it) {
+      cotasOf(it, state).forEach((c, i) => {
+        if (c.mm < 1) return;
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(c.a.x * MM, 0.012, c.a.z * MM), new THREE.Vector3(c.b.x * MM, 0.012, c.b.z * MM)]);
+        const line = new THREE.Line(geo, cotaMat);
+        line.renderOrder = 9;
+        cotaGroup.add(line);
+        labelEls[i].textContent = Math.round(c.mm);
+        cotaAnchors.push({ i, pos: new THREE.Vector3((c.a.x + c.b.x) / 2 * MM, 0.02, (c.a.z + c.b.z) / 2 * MM) });
+      });
+    }
+    invalidate();
+  }
+  function positionLabels() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    for (const a of cotaAnchors) {
+      const v = a.pos.clone().project(camera), el = labelEls[a.i];
+      const visible = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      el.hidden = !visible;
+      if (visible) { el.style.left = ((v.x * 0.5 + 0.5) * w) + 'px'; el.style.top = ((-v.y * 0.5 + 0.5) * h) + 'px'; }
+    }
+  }
+
+  /* ---------- Cámara orbital hecha a mano (para entender cómo funciona) ---------- */
+  const cam = { az: 0.55, el: 0.55, r: 7.4, t: new THREE.Vector3(2.1, 0.8, 1.6) };
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  function updateCamera() {
+    const ce = Math.cos(cam.el);
+    camera.position.set(cam.t.x + cam.r * ce * Math.sin(cam.az), cam.t.y + cam.r * Math.sin(cam.el), cam.t.z + cam.r * ce * Math.cos(cam.az));
+    camera.lookAt(cam.t);
+    invalidate();
+  }
+  let goal = null;
+  function viewGoal(name) {
+    const c = new THREE.Vector3(state.room.width * MM / 2, name === 'top' ? 0 : 0.8, state.room.depth * MM / 2);
+    if (name === 'top') return { az: 0, el: 1.5, r: 8.2, t: c };
+    if (name === 'front') return { az: 0, el: 0.1, r: 7, t: c };
+    return { az: 0.55, el: 0.55, r: 7.4, t: c };
+  }
+  function animateCamera() {
+    if (!goal) return;
+    let done = true;
+    for (const k of ['az', 'el', 'r']) { const d = goal[k] - cam[k]; if (Math.abs(d) > 0.002) { cam[k] += d * 0.16; done = false; } }
+    if (cam.t.distanceTo(goal.t) > 0.002) { cam.t.lerp(goal.t, 0.16); done = false; }
+    if (done) goal = null;
+    updateCamera();
+  }
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { goal = viewGoal(b.dataset.view); }));
+
+  /* ---------- Ratón y táctil ---------- */
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  function setRay(e) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+  }
+  function pickItem(e) {                                // raycasting: ¿qué armario hay bajo el puntero?
+    setRay(e);
+    const hits = ray.intersectObjects([...groups.values()], true);
+    for (const h of hits) {
+      if (!h.object.isMesh) continue;
+      let o = h.object;
+      while (o && o.userData.id === undefined) o = o.parent;
+      if (o) return o.userData.id;
+    }
+    return null;
+  }
+  function floorPoint(e) {                              // punto del suelo (en mm) bajo el puntero
+    setRay(e);
+    const p = new THREE.Vector3();
+    return ray.ray.intersectPlane(floorPlane, p) ? { x: p.x / MM, z: p.z / MM } : null;
+  }
+
+  const pointers = new Map();
+  let mode = 'none', moved = false, downPos = { x: 0, y: 0 }, pinchDist = 0, drag = null;
+  const pointerDist = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('pointerdown', e => {
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* no pasa nada */ }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    goal = null;
+    if (pointers.size === 2) { finishDrag(); mode = 'pinch'; pinchDist = pointerDist(); return; }
+    downPos = { x: e.clientX, y: e.clientY };
+    moved = false;
+    const id = pickItem(e);
+    if (e.button === 0 && id) {
+      select(id);
+      const fp = floorPoint(e), it = itemById(state, id);
+      if (fp) { drag = { id, off: { x: it.x - fp.x, z: it.z - fp.z }, last: { x: it.x, z: it.z }, changed: false }; mode = 'drag'; }
+      else mode = 'none';
+    } else if (e.button === 2 || e.button === 1 || e.shiftKey) mode = 'pan';
+    else mode = 'orbit';
+  });
+  canvas.addEventListener('pointermove', e => {
+    const p = pointers.get(e.pointerId);
+    if (!p) { canvas.style.cursor = pickItem(e) ? 'grab' : 'default'; return; }
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (mode === 'pinch') {
+      const d = pointerDist();
+      if (pinchDist > 0 && d > 0) { cam.r = clamp(cam.r * pinchDist / d, 2, 16); updateCamera(); }
+      pinchDist = d;
+      return;
+    }
+    if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 3) moved = true;
+    if (mode === 'orbit') {
+      cam.az -= dx * 0.006;
+      cam.el = clamp(cam.el + dy * 0.006, 0.05, 1.5);
+      updateCamera();
+    } else if (mode === 'pan') {
+      const s = cam.r * 0.0016;
+      cam.t.x += -Math.cos(cam.az) * dx * s + -Math.sin(cam.az) * dy * s;
+      cam.t.z += Math.sin(cam.az) * dx * s + -Math.cos(cam.az) * dy * s;
+      updateCamera();
+    } else if (mode === 'drag' && moved) {
+      canvas.style.cursor = 'grabbing';
+      dragTo(e);
+    }
+  });
+  function endPointer(e) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (mode === 'drag') finishDrag();
+    else if (mode === 'orbit' && !moved && e.type === 'pointerup') select(null);
+    mode = 'none';
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    cam.r = clamp(cam.r * Math.exp(e.deltaY * 0.001), 2, 16);
+    updateCamera();
+  }, { passive: false });
+
+  /* Arrastrar: imanes → validar → mover. Si el sitio no vale, el armario se queda donde estaba. */
+  function dragTo(e) {
+    const fp = floorPoint(e);
+    if (!fp || !drag) return;
+    const it = itemById(state, drag.id);
+    const s = snapPosition(it, fp.x + drag.off.x, fp.z + drag.off.z, state);
+    const tries = [[s.x, s.z], [s.x, drag.last.z], [drag.last.x, s.z]];   // si choca, prueba a deslizar por un eje
+    let reason = '';
+    for (const [x, z] of tries) {
+      const v = validatePlacement({ ...it, x, z }, state);
+      if (v.ok) {
+        it.x = x; it.z = z;
+        drag.last = { x, z }; drag.changed = true;
+        placeCabinet(groups.get(it.id), it);
+        setBlocked(false);
+        setStatus(s.notes.length ? 'Imán: ' + [...new Set(s.notes)].join(' + ') : 'Moviendo…', 'info');
+        refreshCotas();
+        return;
+      }
+      reason = v.reason;
+    }
+    setBlocked(true);
+    setStatus('Bloqueado: ' + reason + '.', 'warn');
+  }
+  function finishDrag() {
+    if (!drag) return;
+    const changed = drag.changed;
+    drag = null;
+    setBlocked(false);
+    canvas.style.cursor = 'default';
+    if (changed) { commit(); setStatus('Armario movido.', 'info'); }
+  }
+
+  /* ---------- Historial: deshacer y rehacer ---------- */
+  function commit() {
+    const s = JSON.stringify(state);
+    if (hist.stack[hist.i] !== s) {
+      hist.stack.splice(hist.i + 1);
+      hist.stack.push(s);
+      if (hist.stack.length > 100) hist.stack.shift();
+      hist.i = hist.stack.length - 1;
+    }
+    refreshAll();
+  }
+  function restore() {
+    state = JSON.parse(hist.stack[hist.i]);
+    if (selectedId && !itemById(state, selectedId)) selectedId = null;
+    buildRoom(); syncAll(); refreshAll();
+  }
+  function undo() { if (hist.i > 0) { hist.i--; restore(); setStatus('Deshecho.', 'info'); } }
+  function redo() { if (hist.i < hist.stack.length - 1) { hist.i++; restore(); setStatus('Rehecho.', 'info'); } }
+
+  /* ---------- Acciones ---------- */
+  function select(id) {
+    selectedId = id;
+    updateSelection(); refreshPanel(); refreshCotas(); refreshPrice(); refreshCut();
+  }
+  function addItem() {
+    const proto = { id: nextId(state), type: 'armario', x: 0, z: 0, rot: 0, width: 800, height: Math.min(2200, state.room.height), depth: 600, shelves: 4, doors: 2, finish: 'roble' };
+    const spot = findFreeSpot(proto, state);
+    if (!spot) { setStatus('No queda hueco libre para otro armario de 800 mm.', 'warn'); return; }
+    Object.assign(proto, spot);
+    state.items.push(proto);
+    rebuildItem(proto);
+    selectedId = proto.id; updateSelection();
+    commit();
+    setStatus('Armario añadido. Arrástralo a su sitio.', 'info');
+  }
+  function duplicateItem() {
+    const src = itemById(state, selectedId);
+    if (!src) return;
+    const copy = { ...src, id: nextId(state) };
+    const spot = findFreeSpot(copy, state);
+    if (!spot) { setStatus('No hay hueco libre para duplicarlo.', 'warn'); return; }
+    Object.assign(copy, spot);
+    state.items.push(copy);
+    rebuildItem(copy);
+    selectedId = copy.id; updateSelection();
+    commit();
+    setStatus('Armario duplicado.', 'info');
+  }
+  function deleteItem() {
+    const it = itemById(state, selectedId);
+    if (!it) return;
+    state.items = state.items.filter(i => i.id !== it.id);
+    const g = groups.get(it.id);
+    if (g) { scene.remove(g); disposeObject(g); groups.delete(it.id); }
+    openIds.delete(it.id);
+    selectedId = null; selHelpers = [];
+    commit();
+    setStatus('Armario eliminado.', 'info');
+  }
+  function rotateItem() {
+    const it = itemById(state, selectedId);
+    if (!it) return;
+    const res = tryEdit(state, it.id, { rot: it.rot + 90 });
+    if (!res.ok) { setStatus('No se puede girar: ' + res.reason + '.', 'warn'); return; }
+    Object.assign(it, res.item);
+    rebuildItem(it);
+    commit();
+    setStatus(res.notes.length ? res.notes.join(' ') : 'Girado a ' + it.rot + '°.', res.notes.length ? 'warn' : 'info');
+  }
+  $('btnAdd').addEventListener('click', addItem);
+  $('btnDup').addEventListener('click', duplicateItem);
+  $('btnDel').addEventListener('click', deleteItem);
+  $('btnRotate').addEventListener('click', rotateItem);
+  $('btnUndo').addEventListener('click', undo);
+  $('btnRedo').addEventListener('click', redo);
+  window.addEventListener('keydown', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    else if (mod && k === 'y') { e.preventDefault(); redo(); }
+    else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteItem(); }
+    else if (k === 'r' && !mod) rotateItem();
+    else if (k === 'escape') select(null);
+  });
+
+  /* ---------- Panel de medidas ---------- */
+  const finishSel = $('f-finish');
+  for (const [k, f] of Object.entries(FINISHES)) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = f.label;
+    finishSel.appendChild(o);
+  }
+  function refreshPanel() {
+    const it = itemById(state, selectedId);
+    $('itemForm').hidden = !it;
+    $('selHint').hidden = !!it;
+    $('btnRotate').disabled = $('btnDup').disabled = $('btnDel').disabled = !it;
+    if (!it) return;
+    $('f-width').value = it.width; $('f-height').value = it.height; $('f-depth').value = it.depth;
+    $('f-rot').value = it.rot; $('f-shelves').value = it.shelves; $('f-doors').value = it.doors;
+    finishSel.value = it.finish;
+    $('f-open').checked = openIds.has(it.id);
+    $('f-height').max = Math.min(LIMITS.height[1], state.room.height);
+  }
+  function onField() {
+    const it = itemById(state, selectedId);
+    if (!it) return;
+    const res = tryEdit(state, it.id, {
+      width: $('f-width').value, height: $('f-height').value, depth: $('f-depth').value, rot: $('f-rot').value,
+      shelves: $('f-shelves').value, doors: $('f-doors').value, finish: finishSel.value
+    });
+    if (!res.ok) { setStatus('No se aplica: ' + res.reason + '.', 'warn'); refreshPanel(); return; }
+    Object.assign(it, res.item);
+    rebuildItem(it);
+    commit();
+    setStatus(res.notes.length ? res.notes.join(' ') : 'Medidas actualizadas.', res.notes.length ? 'warn' : 'info');
+  }
+  ['f-width', 'f-height', 'f-depth', 'f-rot', 'f-shelves', 'f-doors', 'f-finish'].forEach(id => $(id).addEventListener('change', onField));
+  $('itemForm').addEventListener('submit', e => e.preventDefault());
+  $('f-open').addEventListener('change', e => {
+    if (!selectedId) return;
+    e.target.checked ? openIds.add(selectedId) : openIds.delete(selectedId);
+    invalidate();
+  });
+
+  /* ---------- Presupuesto, despiece y JSON ---------- */
+  const money = v => v.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+  function refreshPrice() {
+    const it = itemById(state, selectedId);
+    let html = '';
+    if (it) {
+      const p = priceOf(it);
+      html += '<div class="pline"><span>Material · ' + p.area.toFixed(2) + ' m²</span><b>' + money(p.material) + '</b></div>' +
+              '<div class="pline"><span>Herrajes · ' + p.hinges + ' bisagras, ' + it.doors + ' tiradores</span><b>' + money(p.hardware) + '</b></div>' +
+              '<div class="pline"><span>Mano de obra</span><b>' + money(p.labor) + '</b></div>' +
+              '<div class="pline"><span>Este armario</span><b>' + money(p.total) + '</b></div>';
+    }
+    const tot = state.items.reduce((s, i) => s + priceOf(i).total, 0);
+    html += '<div class="pline total"><span>Proyecto · ' + state.items.length + (state.items.length === 1 ? ' armario' : ' armarios') + '</span><b>' + money(tot) + '</b></div>';
+    $('price').innerHTML = html;
+  }
+  function refreshCut() {
+    const it = itemById(state, selectedId);
+    const list = cutList(it ? [it] : state.items);
+    let html = '<table><thead><tr><th>Pieza</th><th>Medidas (mm)</th><th>Acabado</th><th class="num">Uds</th></tr></thead><tbody>';
+    for (const r of list.rows) {
+      html += '<tr><td>' + r.name + '</td><td class="mono">' + r.dims.join(' × ') + '</td><td>' + FINISHES[r.finish].label + '</td><td class="num">' + r.qty + '</td></tr>';
+    }
+    html += '<tr><td>Bisagras</td><td class="mono">—</td><td>—</td><td class="num">' + list.hinges + '</td></tr>';
+    html += '<tr><td>Tiradores</td><td class="mono">—</td><td>—</td><td class="num">' + list.handles + '</td></tr>';
+    html += '</tbody></table><p class="note">' + (it ? 'Despiece del armario seleccionado.' : 'Despiece de todo el proyecto. Selecciona un armario para ver solo el suyo.') + '</p>';
+    $('cutTable').innerHTML = html;
+  }
+  const jsonArea = $('jsonArea');
+  function refreshJson() { if (document.activeElement !== jsonArea) jsonArea.value = JSON.stringify(state, null, 2); }
+
+  function showTab(name) {
+    const isCut = name === 'cut';
+    $('tab-cut').hidden = !isCut; $('tab-json').hidden = isCut;
+    $('tab-cut-btn').setAttribute('aria-selected', String(isCut));
+    $('tab-json-btn').setAttribute('aria-selected', String(!isCut));
+  }
+  $('tab-cut-btn').addEventListener('click', () => showTab('cut'));
+  $('tab-json-btn').addEventListener('click', () => showTab('json'));
+
+  const jsonMsg = $('jsonMsg');
+  $('btnCopy').addEventListener('click', () => {
+    const fallback = () => { jsonArea.focus(); jsonArea.select(); setStatus('Texto seleccionado. Cópialo con Ctrl+C.', 'info'); };
+    try { navigator.clipboard.writeText(jsonArea.value).then(() => setStatus('JSON copiado al portapapeles.', 'info'), fallback); }
+    catch (_) { fallback(); }
+  });
+  $('btnLoad').addEventListener('click', () => {
+    const res = parseState(jsonArea.value);
+    if (!res.ok) { jsonMsg.textContent = res.error; jsonMsg.hidden = false; return; }
+    jsonMsg.hidden = true;
+    state = res.state;
+    if (selectedId && !itemById(state, selectedId)) selectedId = null;
+    jsonArea.blur();
+    buildRoom(); syncAll(); commit();
+    goal = viewGoal('persp');
+    setStatus('Modelo cargado desde el JSON.', 'info');
+  });
+
+  function refreshAll() {
+    refreshPanel(); refreshPrice(); refreshCut(); refreshJson(); refreshCotas();
+    $('btnUndo').disabled = hist.i === 0;
+    $('btnRedo').disabled = hist.i >= hist.stack.length - 1;
+    invalidate();
+  }
+
+  /* ---------- Bucle de dibujo ---------- */
+  function resize() {
+    const stage = canvas.parentElement, w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    invalidate();
+  }
+  new ResizeObserver(resize).observe(canvas.parentElement);
+
+  function frame() {
+    requestAnimationFrame(frame);
+    animateDoors();
+    animateCamera();
+    if (!dirty) return;
+    dirty = false;
+    renderer.render(scene, camera);
+    positionLabels();
+  }
+
+  /* ---------- Arranque ---------- */
+  applyTheme();
+  buildRoom();
+  syncAll();
+  updateCamera();
+  resize();
+  refreshAll();
+  setStatus('Listo. Arrastra un armario: se pega a paredes y vecinos, y no puede chocar con el pilar.', 'info');
+  frame();
+})();
+</script>
+
+</body>
+</html>
